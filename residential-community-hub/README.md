@@ -1,6 +1,6 @@
 # 🏘️ Residential Community Hub
 
-A production-ready, enterprise-grade, multi-tenant SaaS platform for residential community management. Built with modern React frontend and Java Spring Boot microservices architecture.
+A production-ready, enterprise-grade, multi-tenant SaaS platform for residential community management. Built with Java Spring Boot microservices architecture and React frontend.
 
 ## 📋 Table of Contents
 
@@ -8,13 +8,13 @@ A production-ready, enterprise-grade, multi-tenant SaaS platform for residential
 - [Features](#features)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
-- [Demo Credentials](#demo-credentials)
-- [User Roles](#user-roles)
+- [API Documentation](#api-documentation)
 - [Deployment](#deployment)
 - [Security](#security)
-- [Support](#support)
+- [License](#license)
 
 ## 🎯 Overview
 
@@ -30,8 +30,12 @@ Residential Community Hub is a comprehensive digital platform that transforms ho
 ### 🔐 Authentication & Authorization
 - JWT-based stateless authentication
 - Refresh token rotation for enhanced security
-- Role-Based Access Control (RBAC) with 5 roles
-- Demo account support for testing
+- Role-Based Access Control (RBAC) with 5 roles:
+  - `PROJECT_OWNER` - Full platform control
+  - `SOCIETY_ADMIN` - Full society management
+  - `SOCIETY_WORKER` - Limited society access
+  - `RESIDENT` - Personal community access
+  - `SECURITY` - Gate management
 
 ### 🏢 Multi-Tenant Architecture
 - Strict tenant isolation
@@ -61,18 +65,21 @@ Residential Community Hub is a comprehensive digital platform that transforms ho
 - Priority levels with visual indicators
 - Push notifications
 - Email alerts
+- SMS integration
 
 ### 👥 Society Social Network
 - Private, society-only social feed
-- Posts with reactions and comments
+- Posts with images
+- Reactions and comments
 - Direct messaging
 - Profile photos
 
 ### 💳 Payments & Billing
 - Society-level billing
 - Multiple payment types (Maintenance, Utilities, Events)
+- Stripe integration
+- Subscription management
 - Invoice generation
-- Payment tracking
 
 ### 📊 Analytics & Reporting
 - Real-time dashboards
@@ -155,18 +162,6 @@ Residential Community Hub is a comprehensive digital platform that transforms ho
 
 ## 🛠️ Tech Stack
 
-### Frontend
-| Technology | Purpose |
-|------------|---------|
-| React 19 | UI library |
-| TypeScript | Type-safe development |
-| Vite | Build tool |
-| Tailwind CSS | Styling |
-| shadcn/ui | UI components |
-| TanStack Query | Server state |
-| Framer Motion | Animations |
-| Recharts | Data visualization |
-
 ### Backend
 | Technology | Purpose |
 |------------|---------|
@@ -179,13 +174,68 @@ Residential Community Hub is a comprehensive digital platform that transforms ho
 | PostgreSQL | Primary database |
 | Redis | Caching & sessions |
 | RabbitMQ | Message queuing |
+| Flyway | Database migrations |
 | Docker | Containerization |
+
+### Frontend
+| Technology | Purpose |
+|------------|---------|
+| React 18 | UI library |
+| TypeScript | Type-safe development |
+| Vite | Build tool |
+| Tailwind CSS | Styling |
+| shadcn/ui | UI components |
+| TanStack Query | Server state |
+| Zustand | Client state |
+| Recharts | Data visualization |
+
+## 📁 Project Structure
+
+```
+residential-community-hub/
+├── backend/                          # Spring Boot Microservices
+│   ├── pom.xml                       # Parent POM
+│   ├── eureka-server/               # Service Discovery
+│   ├── api-gateway/                 # API Gateway
+│   ├── user-service/                # User Management
+│   ├── visitor-service/             # Visitor Management
+│   ├── maintenance-service/         # Maintenance Requests
+│   ├── notification-service/        # Notifications
+│   ├── analytics-service/           # Analytics & Reports
+│   ├── audit-service/               # Audit Logging
+│   ├── payment-service/             # Payments & Billing
+│   └── social-service/              # Social Features
+│
+├── frontend/                         # React Frontend
+│   ├── src/
+│   │   ├── components/              # UI Components
+│   │   ├── pages/                   # Route Pages
+│   │   ├── contexts/                # React Contexts
+│   │   ├── hooks/                   # Custom Hooks
+│   │   ├── lib/                     # Utilities
+│   │   └── types/                   # TypeScript Types
+│   ├── public/
+│   └── package.json
+│
+├── database/                         # Database Migrations
+│   └── migrations/
+│       └── V1__Initial_Schema.sql
+│
+├── docker/                          # Docker Configuration
+│   ├── docker-compose.yml
+│   └── .env.example
+│
+└── docs/                            # Documentation
+    ├── README.md
+    ├── README_ProjectExplanation.md
+    └── README_Deployment.md
+```
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 20+
 - Java 17+
+- Node.js 20+
 - Maven 3.8+
 - PostgreSQL 14+
 - Redis 7+
@@ -211,9 +261,29 @@ cd docker
 docker-compose up -d postgres redis rabbitmq
 ```
 
-#### 4. Start Frontend
+#### 4. Build and Run Backend Services
+
+Start services in order:
+
 ```bash
-cd app
+# 1. Eureka Server
+cd backend/eureka-server
+./mvnw spring-boot:run
+
+# 2. API Gateway
+cd ../api-gateway
+./mvnw spring-boot:run
+
+# 3. User Service
+cd ../user-service
+./mvnw spring-boot:run
+
+# 4. Start other services similarly...
+```
+
+#### 5. Start Frontend
+```bash
+cd frontend
 npm install
 npm run dev
 ```
@@ -222,6 +292,12 @@ The application will be available at:
 - Frontend: http://localhost:5173
 - API Gateway: http://localhost:8080
 - Eureka Dashboard: http://localhost:8761
+
+### Demo Credentials
+
+**Project Owner (Super Admin)**
+- Username: `iprincekumark`
+- Password: `ADMIN@mI5jVTCZn`
 
 ## 🔐 Environment Variables
 
@@ -234,27 +310,31 @@ Key variables:
 - `STRIPE_*` - Payment gateway credentials
 - `SMTP_*` - Email configuration
 
-## 👥 Demo Credentials
+## 📚 API Documentation
 
-The following demo accounts are available for testing:
+API documentation is available via Swagger UI at:
+- User Service: http://localhost:8081/swagger-ui.html
+- Visitor Service: http://localhost:8082/swagger-ui.html
+- (Other services follow same pattern)
 
-| Role | Username | Password |
-|------|----------|----------|
-| Society Admin | `admin_society` | `Demo@123` |
-| Society Worker | `worker_society` | `Demo@123` |
-| Resident | `resident_user` | `Demo@123` |
+### Authentication
 
-Click on any demo account button on the login page to instantly log in.
+All API requests (except login/register) require a Bearer token:
 
-## 👤 User Roles
+```http
+Authorization: Bearer <access_token>
+```
 
-| Role | Description | Permissions |
-|------|-------------|-------------|
-| `PROJECT_OWNER` | Full platform control | All permissions |
-| `SOCIETY_ADMIN` | Society management | Users, visitors, maintenance, announcements, payments, analytics |
-| `SOCIETY_WORKER` | Limited society access | Visitors, maintenance, announcements (read) |
-| `RESIDENT` | Personal community access | Visitors, maintenance, announcements, payments, social |
-| `SECURITY` | Gate management | Visitors (check-in/out), announcements (read) |
+### Common Response Format
+
+```json
+{
+  "success": true,
+  "data": {},
+  "message": "Success",
+  "timestamp": "2024-01-01T00:00:00"
+}
+```
 
 ## 🚀 Deployment
 
@@ -277,10 +357,6 @@ docker-compose up -d
 - XSS protection
 - Secrets management via environment variables
 - HTTPS/TLS for all communications
-
-## 📧 Support
-
-For support, email princevrse@gmail.com or connect via Twitter [@iprincekumark](https://x.com/iprincekumark).
 
 ## 👨‍💻 Founder
 

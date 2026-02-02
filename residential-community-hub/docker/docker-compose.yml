@@ -1,0 +1,418 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # INFRASTRUCTURE SERVICES
+  # ============================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: rch-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-residentialhub}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../database/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - rch-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-residentialhub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: rch-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - rch-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rch-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - rch-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================
+  # MICROSERVICES
+  # ============================================
+
+  eureka-server:
+    build:
+      context: ../backend/eureka-server
+      dockerfile: Dockerfile
+    container_name: rch-eureka-server
+    environment:
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-admin}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-admin}
+      EUREKA_HOSTNAME: eureka-server
+    ports:
+      - "8761:8761"
+    networks:
+      - rch-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  api-gateway:
+    build:
+      context: ../backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: rch-api-gateway
+    environment:
+      EUREKA_HOST: eureka-server
+      EUREKA_PORT: 8761
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-admin}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-admin}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    ports:
+      - "8080:8080"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rch-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  user-service:
+    build:
+      context: ../backend/user-service
+      dockerfile: Dockerfile
+    container_name: rch-user-service
+    environment:
+      EUREKA_HOST: eureka-server
+      EUREKA_PORT: 8761
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-admin}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-admin}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-residentialhub}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - rch-network
+
+  visitor-service:
+    build:
+      context: ../backend/visitor-service
+      dockerfile: Dockerfile
+    container_name: rch-visitor-service
+    environment:
+      EUREKA_HOST: eureka-server
+      EUREKA_PORT: 8761
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-admin}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-admin}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-residentialhub}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - rch-network
+
+  maintenance-service:
+    build:
+      context: ../backend/maintenance-service
+      dockerfile: Dockerfile
+    container_name: rch-maintenance-service
+    environment:
+      EUREKA_HOST: eureka-server
+      EUREKA_PORT: 8761
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-admin}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-admin}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-residentialhub}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - rch-network
+
+  notification-service:
+    build:
+      context: ../backend/notification-service
+      dockerfile: Dockerfile
+    container_name: rch-notification-service
+    environment:
+      EUREKA_HOST: eureka-server
+      EUREKA_PORT: 8761
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-admin}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-admin}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+    ports:
+      - "8084:8084"
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - rch-network
+
+  analytics-service:
+    build:
+      context: ../backend/analytics-service
+      dockerfile: Dockerfile
+    container_name: rch-analytics-service
+    environment:
+      EUREKA_HOST: eureka-server
+      EUREKA_PORT: 8761
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-admin}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-admin}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-residentialhub}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "8085:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - rch-network
+
+  audit-service:
+    build:
+      context: ../backend/audit-service
+      dockerfile: Dockerfile
+    container_name: rch-audit-service
+    environment:
+      EUREKA_HOST: eureka-server
+      EUREKA_PORT: 8761
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-admin}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-admin}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-residentialhub}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "8086:8086"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - rch-network
+
+  payment-service:
+    build:
+      context: ../backend/payment-service
+      dockerfile: Dockerfile
+    container_name: rch-payment-service
+    environment:
+      EUREKA_HOST: eureka-server
+      EUREKA_PORT: 8761
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-admin}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-admin}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-residentialhub}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+    ports:
+      - "8087:8087"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - rch-network
+
+  social-service:
+    build:
+      context: ../backend/social-service
+      dockerfile: Dockerfile
+    container_name: rch-social-service
+    environment:
+      EUREKA_HOST: eureka-server
+      EUREKA_PORT: 8761
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-admin}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-admin}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-residentialhub}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "8088:8088"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - rch-network
+
+  # ============================================
+  # FRONTEND
+  # ============================================
+
+  frontend:
+    build:
+      context: ../../app
+      dockerfile: Dockerfile
+    container_name: rch-frontend
+    environment:
+      VITE_API_BASE_URL: ${API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "80:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - rch-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+
+networks:
+  rch-network:
+    driver: bridge
